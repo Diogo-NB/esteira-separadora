@@ -31,12 +31,12 @@ Quando uma mudança parecer exigir alteração em uma biblioteca externa, manter
 Usar Conventional Commits em inglês no formato:
 
 ```text
-<type>(<scope>): <short imperative description>
+<type>: <short imperative description>
 ```
 
 Regras:
 
-1. Usar apenas letras minúsculas em `type` e `scope`.
+1. Usar apenas letras minúsculas em `type`.
 2. Escrever a descrição curta em inglês, no imperativo, sem ponto final.
 3. Manter o título conciso e limitar cada commit a uma mudança lógica.
 4. Usar o corpo do commit somente quando necessário para explicar contexto, motivação ou limitações.
@@ -53,20 +53,12 @@ test     criação ou alteração de testes
 chore    manutenção sem alterar código funcional
 ```
 
-Scopes preferidos:
-
-```text
-firmware código Arduino em source/
-modbus   integração e mapeamento Modbus/ScadaBR
-repo     arquivos e configuração do repositório
-```
-
 Exemplos:
 
 ```text
-feat(firmware): add conveyor motor control
-fix(modbus): correct sensor input offset
-docs(repo): document contribution rules
+feat: add conveyor motor control
+fix: correct sensor input offset
+docs: document contribution rules
 ```
 
 ## Compilação e validação
