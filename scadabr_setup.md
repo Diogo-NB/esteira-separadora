@@ -34,6 +34,55 @@ Conectar o LDR no pino `A0` usando um divisor de tensão.
 
 Os pinos `0` e `1` são reservados para a comunicação Modbus pela porta `Serial`.
 
+## Exportar e importar configuração
+
+Salvar exports do ScadaBR nesta pasta do repositório:
+
+```text
+scadabr/exports/
+```
+
+Nome sugerido para o arquivo:
+
+```text
+scadabr/exports/esteira-scadabr-config.json
+```
+
+Esse arquivo deve conter somente a configuração necessária para recriar o Data Source Modbus e os Data Points da esteira. Não usar essa pasta para backup completo do ScadaBR com banco de dados, usuários, eventos ou histórico.
+
+### Exportar no PC origem
+
+1. Entrar no ScadaBR como administrador.
+2. Abrir a tela de importação/exportação de configuração.
+3. Exportar os itens relacionados a:
+   ```text
+   Data Sources
+   Data Points
+   ```
+4. Copiar o JSON exportado para:
+   ```text
+   scadabr/exports/esteira-scadabr-config.json
+   ```
+5. Revisar o arquivo antes de commitar para garantir que ele não contém dados sensíveis ou configuração fora do projeto.
+
+### Importar em outro PC
+
+1. Instalar uma versão igual ou compatível do ScadaBR.
+2. Abrir a tela de importação/exportação de configuração.
+3. Colar ou carregar o conteúdo de:
+   ```text
+   scadabr/exports/esteira-scadabr-config.json
+   ```
+4. Validar a configuração, se o ScadaBR oferecer essa opção.
+5. Importar a configuração.
+6. Ajustar a porta serial do Data Source no PC novo, porque a porta pode mudar:
+   ```text
+   COM3, COM4, /dev/ttyUSB0, /dev/ttyACM0
+   ```
+7. Confirmar que o Data Source e todos os Data Points estão habilitados.
+
+Após importar, testar primeiro `COLOR_SENSOR_RAW`. Se esse ponto atualizar, a comunicação Modbus básica está funcionando.
+
 ## Data Points
 
 Criar os comandos abaixo como `Coil Status`, com `Settable: Sim`. Para executar um comando, escrever `true`; o Arduino executará a ação e retornará o Coil para `false`.
