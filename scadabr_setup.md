@@ -38,6 +38,8 @@ Os pinos `0` e `1` são reservados para a comunicação Modbus pela porta `Seria
 
 Criar os comandos abaixo como `Coil Status`, com `Settable: Sim`. Para executar um comando, escrever `true`; o Arduino executará a ação e retornará o Coil para `false`.
 
+Esses Coils são comandos momentâneos, não estados. É esperado que voltem para `false` logo após o Arduino processar o comando. Para visualizar o modo atual, usar `OPERATION_MODE` no Input Register offset `3`.
+
 | Nome sugerido | Tipo | Offset | Função |
 |---|---|---:|---|
 | `CMD_CYCLE_OPERATION_MODE` | Coil Status | 100 | alternar modo: `OFF -> MANUAL -> AUTO -> OFF` |
@@ -56,13 +58,17 @@ Criar os estados abaixo como `Input Status`, com `Settable: Não`.
 
 Criar os valores abaixo como `Input Register`, com `Settable: Não`.
 
-| Nome sugerido | Tipo | Offset | Valor |
-|---|---|---:|---|
-| `LEFT_ITEM_COUNT` | Input Register | 0 | itens enviados à esquerda |
-| `RIGHT_ITEM_COUNT` | Input Register | 1 | itens enviados à direita |
-| `COLOR_SENSOR_READING` | Input Register | 2 | `0=NONE`, `1=LEFT`, `2=RIGHT` |
-| `OPERATION_MODE` | Input Register | 3 | `0=OFF`, `1=MANUAL`, `2=AUTO` |
-| `COLOR_SENSOR_RAW` | Input Register | 4 | leitura bruta do LDR, de `0` a `1023` |
+No campo de tipo de dado do ScadaBR, usar inteiro sem sinal de 2 bytes para esses registradores. Não configurar esses pontos como `Binary`, porque eles armazenam valores numéricos.
+
+| Nome sugerido | Tipo | Offset | Data Type no ScadaBR | Valor |
+|---|---|---:|---|---|
+| `LEFT_ITEM_COUNT` | Input Register | 0 | 2 byte unsigned integer | itens enviados à esquerda |
+| `RIGHT_ITEM_COUNT` | Input Register | 1 | 2 byte unsigned integer | itens enviados à direita |
+| `COLOR_SENSOR_READING` | Input Register | 2 | 2 byte unsigned integer | `0=NONE`, `1=LEFT`, `2=RIGHT` |
+| `OPERATION_MODE` | Input Register | 3 | 2 byte unsigned integer | `0=OFF`, `1=MANUAL`, `2=AUTO` |
+| `COLOR_SENSOR_RAW` | Input Register | 4 | 2 byte unsigned integer | leitura bruta do LDR, de `0` a `1023` |
+
+Se `CMD_CYCLE_OPERATION_MODE` voltar para `false`, isso está correto. O valor que deve mudar e permanecer é `OPERATION_MODE`: `0=OFF`, `1=MANUAL`, `2=AUTO`.
 
 ## Regras da simulação
 
