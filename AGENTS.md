@@ -8,6 +8,20 @@ Não expandir a documentação geral do projeto nem explicar objetivos amplos da
 
 O foco deste arquivo é orientar alterações no código Arduino e na integração Modbus/ScadaBR.
 
+## Hardware atual
+
+A placa usada neste projeto é um Arduino Uno R3.
+
+Os pinos `0` e `1` devem permanecer livres porque são usados pela porta `Serial` da comunicação Modbus RTU.
+
+Durante a fase atual, os comandos físicos são simulados com push buttons usando `INPUT_PULLUP`, o sensor de cor é simulado com um LDR no pino analógico `A0`, e todos os atuadores são simulados com LEDs.
+
+O mapa atual de pinagem, pontos Modbus e configuração do ScadaBR está documentado em:
+
+```text
+scadabr_setup.md
+```
+
 ## Arquivo principal
 
 O código-fonte Arduino que deve ser modificado está em:
@@ -160,58 +174,15 @@ Usar Holding Registers para valores numéricos de leitura/escrita.
 
 Usar Input Registers para valores numéricos somente leitura.
 
-## Teste funcional já validado
+## Simulação funcional atual
 
-O teste funcional representado pelo código atual é o controle de um LED no pino 9 do Arduino através do Coil `100` no ScadaBR.
+O código atual simula a esteira, o sensor de cor e os servos usando push buttons e LEDs.
 
-Padrão mínimo conhecido como funcional:
+O estado operacional é representado por três modos: `OFF`, `MANUAL` e `AUTO`. Um único botão físico e um único comando no ScadaBR alternam essa sequência.
 
-```cpp
-#include <Modbus.h>
-#include <ModbusSerial.h>
+Os comandos escritos pelo ScadaBR são Coils momentâneos. O Arduino consome cada comando, limpa o Coil e publica o estado efetivo usando Input Status ou Input Registers.
 
-const int LED_PIN = 9;
-const int LED_CONTROL_COIL = 100;
-
-const byte SLAVE_ID = 1;
-const long BAUD_RATE = 9600;
-
-ModbusSerial modbus;
-
-void setup() {
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
-
-  modbus.config(&Serial, BAUD_RATE, SERIAL_8N1);
-  modbus.setSlaveId(SLAVE_ID);
-  modbus.addCoil(LED_CONTROL_COIL, false);
-}
-
-void loop() {
-  modbus.task();
-
-  digitalWrite(LED_PIN, modbus.Coil(LED_CONTROL_COIL) ? HIGH : LOW);
-}
-```
-
-Configuração correspondente no ScadaBR:
-
-```text
-Data Source:
-Tipo: Modbus Serial
-Encoding: RTU
-Slave ID: 1
-Baud rate: 9600
-Data bits: 8
-Parity: None
-Stop bits: 1
-
-Data Point:
-Nome: LED_CONTROL
-Tipo: Coil Status
-Offset: 100
-Settable: Sim
-```
+Ao alterar a pinagem ou o mapa Modbus, atualizar também `scadabr_setup.md`.
 
 ## Falhas comuns
 
