@@ -14,7 +14,7 @@ A placa usada neste projeto é um Arduino Uno R3.
 
 Os pinos `0` e `1` devem permanecer livres porque são usados pela porta `Serial` da comunicação Modbus RTU.
 
-Durante a fase atual, os comandos físicos são simulados com push buttons usando `INPUT_PULLUP`, o sensor de cor é simulado com um LDR no pino analógico `A0`, e todos os atuadores são simulados com LEDs.
+Durante a fase atual, os comandos físicos são simulados com push buttons usando `INPUT_PULLUP`, o sensor de cor é simulado com um módulo LDR digital no pino `12`, e todos os atuadores são simulados com LEDs.
 
 O mapa atual de pinagem, pontos Modbus e configuração do ScadaBR está documentado em:
 

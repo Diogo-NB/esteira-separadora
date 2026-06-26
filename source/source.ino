@@ -4,7 +4,7 @@
 const byte MODE_BUTTON_PIN = 2;
 const byte MANUAL_LEFT_BUTTON_PIN = 5;
 const byte MANUAL_RIGHT_BUTTON_PIN = 6;
-const byte COLOR_SENSOR_PIN = A0;
+const byte COLOR_SENSOR_PIN = 12;
 
 const byte MOTOR_LED_PIN = 9;
 const byte LEFT_SERVO_LED_PIN = 10;
@@ -24,14 +24,15 @@ const word LEFT_ITEM_COUNT_IREG = 0;
 const word RIGHT_ITEM_COUNT_IREG = 1;
 const word COLOR_SENSOR_READING_IREG = 2;
 const word OPERATION_MODE_IREG = 3;
-const word COLOR_SENSOR_RAW_IREG = 4;
+const word COLOR_SENSOR_SIGNAL_IREG = 4;
 
 const byte SLAVE_ID = 1;
 const long BAUD_RATE = 9600;
 const unsigned long BUTTON_DEBOUNCE_MS = 50;
 const unsigned long SERVO_PULSE_MS = 1000;
-const word COLOR_SENSOR_THRESHOLD = 512;
-const word COLOR_SENSOR_HYSTERESIS = 30;
+const unsigned long COLOR_SENSOR_STABLE_MS = 50;
+// Ajuste para LOW se a saída digital do módulo LDR estiver invertida.
+const byte COLOR_SENSOR_LEFT_SIGNAL = HIGH;
 
 enum Destination {
   DESTINATION_NONE = 0,
@@ -39,11 +40,7 @@ enum Destination {
   DESTINATION_RIGHT = 2
 };
 
-enum OperationMode {
-  MODE_OFF = 0,
-  MODE_MANUAL = 1,
-  MODE_AUTO = 2
-};
+enum OperationMode { MODE_OFF = 0, MODE_MANUAL = 1, MODE_AUTO = 2 };
 
 struct ButtonState {
   bool lastReading;
@@ -57,6 +54,7 @@ bool isManualMode();
 bool isAutomaticMode();
 void cycleOperationMode();
 void updateColorSensorReading();
+bool readStableColorSensorSignal(byte &stableSignal);
 void activateServo(Destination destination);
 void countServoDestination(Destination destination);
 
@@ -72,7 +70,11 @@ Destination activeServo = DESTINATION_NONE;
 unsigned long servoActivatedAt = 0;
 word leftItemCount = 0;
 word rightItemCount = 0;
-word colorSensorRawValue = 0;
+word colorSensorDigitalValue = 0;
+byte lastColorSensorSignal = LOW;
+byte stableColorSensorSignal = LOW;
+unsigned long colorSensorLastChangeTime = 0;
+bool colorSensorInitialized = false;
 
 void setup() {
   configurePins();
@@ -97,6 +99,7 @@ void configurePins() {
   pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
   pinMode(MANUAL_LEFT_BUTTON_PIN, INPUT_PULLUP);
   pinMode(MANUAL_RIGHT_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(COLOR_SENSOR_PIN, INPUT);
 
   pinMode(MOTOR_LED_PIN, OUTPUT);
   pinMode(LEFT_SERVO_LED_PIN, OUTPUT);
@@ -123,7 +126,7 @@ void registerModbusPoints() {
   modbus.addIreg(RIGHT_ITEM_COUNT_IREG, rightItemCount);
   modbus.addIreg(COLOR_SENSOR_READING_IREG, colorSensorReading);
   modbus.addIreg(OPERATION_MODE_IREG, operationMode);
-  modbus.addIreg(COLOR_SENSOR_RAW_IREG, colorSensorRawValue);
+  modbus.addIreg(COLOR_SENSOR_SIGNAL_IREG, colorSensorDigitalValue);
 }
 
 void handleScadaCommands() {
@@ -199,19 +202,15 @@ void cycleOperationMode() {
 }
 
 void updateColorSensorReading() {
-  colorSensorRawValue = analogRead(COLOR_SENSOR_PIN);
-  Destination newReading = colorSensorReading;
+  byte sensorSignal;
 
-  if (colorSensorRawValue < COLOR_SENSOR_THRESHOLD - COLOR_SENSOR_HYSTERESIS) {
-    newReading = DESTINATION_LEFT;
-  } else if (colorSensorRawValue >
-             COLOR_SENSOR_THRESHOLD + COLOR_SENSOR_HYSTERESIS) {
-    newReading = DESTINATION_RIGHT;
-  } else if (colorSensorReading == DESTINATION_NONE) {
-    newReading = colorSensorRawValue < COLOR_SENSOR_THRESHOLD
-                     ? DESTINATION_LEFT
-                     : DESTINATION_RIGHT;
+  if (!readStableColorSensorSignal(sensorSignal)) {
+    return;
   }
+
+  Destination newReading = sensorSignal == COLOR_SENSOR_LEFT_SIGNAL
+                               ? DESTINATION_LEFT
+                               : DESTINATION_RIGHT;
 
   if (newReading == colorSensorReading) {
     return;
@@ -222,6 +221,35 @@ void updateColorSensorReading() {
   if (isAutomaticMode()) {
     activateServo(colorSensorReading);
   }
+}
+
+bool readStableColorSensorSignal(byte &stableSignal) {
+  byte currentSignal = digitalRead(COLOR_SENSOR_PIN);
+  colorSensorDigitalValue = currentSignal == HIGH ? 1 : 0;
+
+  if (!colorSensorInitialized) {
+    lastColorSensorSignal = currentSignal;
+    stableColorSensorSignal = currentSignal;
+    colorSensorLastChangeTime = millis();
+    colorSensorInitialized = true;
+    stableSignal = stableColorSensorSignal;
+    return true;
+  }
+
+  if (currentSignal != lastColorSensorSignal) {
+    colorSensorLastChangeTime = millis();
+    lastColorSensorSignal = currentSignal;
+    return false;
+  }
+
+  if (millis() - colorSensorLastChangeTime < COLOR_SENSOR_STABLE_MS ||
+      currentSignal == stableColorSensorSignal) {
+    return false;
+  }
+
+  stableColorSensorSignal = currentSignal;
+  stableSignal = stableColorSensorSignal;
+  return true;
 }
 
 void activateServo(Destination destination) {
@@ -244,44 +272,32 @@ void updateServoPulse() {
   }
 }
 
-void stopServo() {
-  activeServo = DESTINATION_NONE;
-}
+void stopServo() { activeServo = DESTINATION_NONE; }
 
 void updateOutputs() {
   digitalWrite(MOTOR_LED_PIN, isConveyorOn() ? HIGH : LOW);
-  digitalWrite(
-      LEFT_SERVO_LED_PIN,
-      activeServo == DESTINATION_LEFT ? HIGH : LOW);
-  digitalWrite(
-      RIGHT_SERVO_LED_PIN,
-      activeServo == DESTINATION_RIGHT ? HIGH : LOW);
+  digitalWrite(LEFT_SERVO_LED_PIN,
+               activeServo == DESTINATION_LEFT ? HIGH : LOW);
+  digitalWrite(RIGHT_SERVO_LED_PIN,
+               activeServo == DESTINATION_RIGHT ? HIGH : LOW);
 }
 
 void publishScadaState() {
   updateScadaStatus(CONVEYOR_ON_ISTS, isConveyorOn());
   updateScadaStatus(AUTOMATIC_MODE_ISTS, isAutomaticMode());
-  updateScadaStatus(
-      LEFT_SERVO_ACTIVE_ISTS,
-      activeServo == DESTINATION_LEFT);
-  updateScadaStatus(
-      RIGHT_SERVO_ACTIVE_ISTS,
-      activeServo == DESTINATION_RIGHT);
+  updateScadaStatus(LEFT_SERVO_ACTIVE_ISTS, activeServo == DESTINATION_LEFT);
+  updateScadaStatus(RIGHT_SERVO_ACTIVE_ISTS, activeServo == DESTINATION_RIGHT);
 
   updateScadaValue(LEFT_ITEM_COUNT_IREG, leftItemCount);
   updateScadaValue(RIGHT_ITEM_COUNT_IREG, rightItemCount);
   updateScadaValue(COLOR_SENSOR_READING_IREG, colorSensorReading);
   updateScadaValue(OPERATION_MODE_IREG, operationMode);
-  updateScadaValue(COLOR_SENSOR_RAW_IREG, colorSensorRawValue);
+  updateScadaValue(COLOR_SENSOR_SIGNAL_IREG, colorSensorDigitalValue);
 }
 
-void updateScadaStatus(word offset, bool value) {
-  modbus.Ists(offset, value);
-}
+void updateScadaStatus(word offset, bool value) { modbus.Ists(offset, value); }
 
-void updateScadaValue(word offset, word value) {
-  modbus.Ireg(offset, value);
-}
+void updateScadaValue(word offset, word value) { modbus.Ireg(offset, value); }
 
 void countServoDestination(Destination destination) {
   if (destination == DESTINATION_LEFT) {
@@ -291,14 +307,8 @@ void countServoDestination(Destination destination) {
   }
 }
 
-bool isConveyorOn() {
-  return operationMode != MODE_OFF;
-}
+bool isConveyorOn() { return operationMode != MODE_OFF; }
 
-bool isManualMode() {
-  return operationMode == MODE_MANUAL;
-}
+bool isManualMode() { return operationMode == MODE_MANUAL; }
 
-bool isAutomaticMode() {
-  return operationMode == MODE_AUTO;
-}
+bool isAutomaticMode() { return operationMode == MODE_AUTO; }

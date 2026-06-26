@@ -519,7 +519,7 @@
          "discardLowLimit":-1.7976931348623157E308,
          "enabled":true,
          "intervalLoggingPeriod":15,
-         "name":"COLOR_SENSOR_RAW",
+         "name":"COLOR_SENSOR_SIGNAL",
          "purgePeriod":1,
          "textRenderer":{
             "type":"PLAIN",

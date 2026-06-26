@@ -20,7 +20,7 @@ Os offsets são baseados em `0`. Não abrir o Serial Monitor ou Serial Plotter e
 
 Conectar cada push button entre o pino indicado e o GND. O código usa `INPUT_PULLUP`.
 
-Conectar o LDR no pino `A0` usando um divisor de tensão.
+Conectar a saída digital do módulo LDR no pino `12`.
 
 | Pino | Simulação |
 |---:|---|
@@ -30,7 +30,7 @@ Conectar o LDR no pino `A0` usando um divisor de tensão.
 | 9 | LED do motor/esteira ligada |
 | 10 | LED do servo esquerdo |
 | 11 | LED do servo direito |
-| A0 | leitura analógica do LDR |
+| 12 | saída digital do módulo LDR |
 
 Os pinos `0` e `1` são reservados para a comunicação Modbus pela porta `Serial`.
 
@@ -81,7 +81,7 @@ Esse arquivo deve conter somente a configuração necessária para recriar o Dat
    ```
 7. Confirmar que o Data Source e todos os Data Points estão habilitados.
 
-Após importar, testar primeiro `COLOR_SENSOR_RAW`. Se esse ponto atualizar, a comunicação Modbus básica está funcionando.
+Após importar, testar primeiro `COLOR_SENSOR_SIGNAL`. Se esse ponto atualizar, a comunicação Modbus básica está funcionando.
 
 ## Data Points
 
@@ -115,7 +115,7 @@ No campo de tipo de dado do ScadaBR, usar inteiro sem sinal de 2 bytes para esse
 | `RIGHT_ITEM_COUNT` | Input Register | 1 | 2 byte unsigned integer | itens enviados à direita |
 | `COLOR_SENSOR_READING` | Input Register | 2 | 2 byte unsigned integer | `0=NONE`, `1=LEFT`, `2=RIGHT` |
 | `OPERATION_MODE` | Input Register | 3 | 2 byte unsigned integer | `0=OFF`, `1=MANUAL`, `2=AUTO` |
-| `COLOR_SENSOR_RAW` | Input Register | 4 | 2 byte unsigned integer | leitura bruta do LDR, de `0` a `1023` |
+| `COLOR_SENSOR_SIGNAL` | Input Register | 4 | 2 byte unsigned integer | saída digital do módulo LDR, `0` ou `1` |
 
 Se `CMD_CYCLE_OPERATION_MODE` voltar para `false`, isso está correto. O valor que deve mudar e permanecer é `OPERATION_MODE`: `0=OFF`, `1=MANUAL`, `2=AUTO`.
 
@@ -123,8 +123,8 @@ Se `CMD_CYCLE_OPERATION_MODE` voltar para `false`, isso está correto. O valor q
 
 - A esteira inicia no modo `OFF`.
 - O botão físico do pino `2` e o Coil `100` alternam a sequência `OFF -> MANUAL -> AUTO -> OFF`.
-- O LDR no `A0` atualiza continuamente a leitura do sensor.
-- O limiar padrão é `512`, com histerese de `30`, para evitar alternância falsa perto do limite.
+- O módulo LDR no pino `12` atualiza continuamente a leitura digital do sensor.
+- O limiar é ajustado no próprio módulo LDR. O código aplica uma estabilização de `50 ms` na saída digital antes de mudar a leitura efetiva.
 - Os servos somente funcionam com a esteira ligada.
 - Os comandos de servo físicos e remotos somente funcionam no modo manual.
 - No modo automático, uma mudança de lado na leitura do LDR aciona o servo correspondente.
@@ -138,6 +138,6 @@ Se `CMD_CYCLE_OPERATION_MODE` voltar para `false`, isso está correto. O valor q
 2. Habilitar o Data Source e todos os Data Points no ScadaBR.
 3. Acionar `CMD_CYCLE_OPERATION_MODE` e confirmar a sequência `OFF`, `MANUAL`, `AUTO` em `OPERATION_MODE`.
 4. No modo manual, testar os comandos dos servos e confirmar os pulsos nos pinos `10` e `11`.
-5. No modo automático, variar a iluminação do LDR e confirmar `COLOR_SENSOR_RAW`, `COLOR_SENSOR_READING` e servo automático.
+5. No modo automático, variar a iluminação do LDR e confirmar `COLOR_SENSOR_SIGNAL`, `COLOR_SENSOR_READING` e servo automático.
 6. Confirmar que os contadores incrementam junto com cada pulso de servo aceito.
 7. Acionar `CMD_RESET_COUNTERS` e confirmar que ambos retornam a zero.
