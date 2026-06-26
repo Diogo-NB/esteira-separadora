@@ -22,17 +22,35 @@ Conectar cada push button entre o pino indicado e o GND. O código usa `INPUT_PU
 
 Conectar a saída digital do módulo LDR no pino `12`.
 
-| Pino | Simulação |
+Conectar o fio de sinal do servo direito no pino `13`. Alimentar o servo com
+uma fonte externa regulada de `5 V` e conectar o GND dessa fonte ao GND do
+Arduino. Não alimentar o servo pelo pino `5V` do Arduino durante os testes com
+carga.
+
+| Pino | Uso |
 |---:|---|
 | 2 | alternar modo: desligada, manual, automático |
 | 5 | comando manual do servo esquerdo |
 | 6 | comando manual do servo direito |
 | 9 | LED do motor/esteira ligada |
 | 10 | LED do servo esquerdo |
-| 11 | LED do servo direito |
 | 12 | saída digital do módulo LDR |
+| 13 | sinal do servo direito |
 
 Os pinos `0` e `1` são reservados para a comunicação Modbus pela porta `Serial`.
+
+## Ligação do servo direito
+
+Usar a ligação abaixo para o servo direito:
+
+| Fio do servo | Conectar em |
+|---|---|
+| VCC/vermelho | `+5 V` da fonte externa |
+| GND/marrom ou preto | GND da fonte externa e GND do Arduino |
+| Sinal/amarelo ou laranja | pino `13` do Arduino |
+
+Se possível, colocar um capacitor entre `+5 V` e GND próximo ao servo, por
+exemplo entre `470 uF` e `1000 uF`.
 
 ## Exportar e importar configuração
 
@@ -93,7 +111,7 @@ Esses Coils são comandos momentâneos, não estados. É esperado que voltem par
 |---|---|---:|---|
 | `CMD_CYCLE_OPERATION_MODE` | Coil Status | 100 | alternar modo: `OFF -> MANUAL -> AUTO -> OFF` |
 | `CMD_LEFT_SERVO` | Coil Status | 102 | acionar servo esquerdo no modo manual |
-| `CMD_RIGHT_SERVO` | Coil Status | 103 | acionar servo direito no modo manual |
+| `CMD_RIGHT_SERVO` | Coil Status | 103 | acionar servo direito real no modo manual |
 | `CMD_RESET_COUNTERS` | Coil Status | 104 | zerar os dois contadores |
 
 Criar os estados abaixo como `Input Status`, com `Settable: Não`.
@@ -103,7 +121,7 @@ Criar os estados abaixo como `Input Status`, com `Settable: Não`.
 | `CONVEYOR_ON` | Input Status | 0 | esteira ligada |
 | `AUTOMATIC_MODE` | Input Status | 1 | modo automático ativo |
 | `LEFT_SERVO_ACTIVE` | Input Status | 2 | pulso esquerdo ativo |
-| `RIGHT_SERVO_ACTIVE` | Input Status | 3 | pulso direito ativo |
+| `RIGHT_SERVO_ACTIVE` | Input Status | 3 | servo direito na posição ativa |
 
 Criar os valores abaixo como `Input Register`, com `Settable: Não`.
 
@@ -128,16 +146,19 @@ Se `CMD_CYCLE_OPERATION_MODE` voltar para `false`, isso está correto. O valor q
 - Os servos somente funcionam com a esteira ligada.
 - Os comandos de servo físicos e remotos somente funcionam no modo manual.
 - No modo automático, uma mudança de lado na leitura do LDR aciona o servo correspondente.
-- Cada servo fica ativo por `1 segundo`. Novos comandos são ignorados durante esse pulso.
+- O servo direito inicia próximo do ângulo mínimo, vai para próximo do ângulo máximo quando acionado, aguarda `3 segundos` e retorna para a posição inicial.
+- O servo esquerdo continua simulado por LED no pino `10`, com pulso de `1 segundo`.
+- Novos comandos de servo são ignorados enquanto um acionamento está ativo.
 - Desligar a esteira cancela imediatamente um pulso ativo.
-- Os contadores incrementam quando um pulso válido do servo correspondente começa.
+- Os contadores incrementam quando um acionamento válido do servo correspondente começa.
 
 ## Validação manual
 
 1. Fazer upload pela Arduino IDE e fechar o Serial Monitor e o Serial Plotter.
 2. Habilitar o Data Source e todos os Data Points no ScadaBR.
 3. Acionar `CMD_CYCLE_OPERATION_MODE` e confirmar a sequência `OFF`, `MANUAL`, `AUTO` em `OPERATION_MODE`.
-4. No modo manual, testar os comandos dos servos e confirmar os pulsos nos pinos `10` e `11`.
-5. No modo automático, variar a iluminação do LDR e confirmar `COLOR_SENSOR_SIGNAL`, `COLOR_SENSOR_READING` e servo automático.
-6. Confirmar que os contadores incrementam junto com cada pulso de servo aceito.
-7. Acionar `CMD_RESET_COUNTERS` e confirmar que ambos retornam a zero.
+4. No modo manual, testar `CMD_LEFT_SERVO` e confirmar o pulso no LED do pino `10`.
+5. No modo manual, testar `CMD_RIGHT_SERVO` e confirmar que o servo no pino `13` vai para a direita, aguarda cerca de `3 segundos` e retorna.
+6. No modo automático, variar a iluminação do LDR e confirmar `COLOR_SENSOR_SIGNAL`, `COLOR_SENSOR_READING` e servo automático.
+7. Confirmar que os contadores incrementam junto com cada acionamento de servo aceito.
+8. Acionar `CMD_RESET_COUNTERS` e confirmar que ambos retornam a zero.

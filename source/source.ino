@@ -1,5 +1,6 @@
 #include <Modbus.h>
 #include <ModbusSerial.h>
+#include <Servo.h>
 
 const byte MODE_BUTTON_PIN = 2;
 const byte MANUAL_LEFT_BUTTON_PIN = 5;
@@ -8,7 +9,7 @@ const byte COLOR_SENSOR_PIN = 12;
 
 const byte MOTOR_LED_PIN = 9;
 const byte LEFT_SERVO_LED_PIN = 10;
-const byte RIGHT_SERVO_LED_PIN = 11;
+const byte RIGHT_SERVO_PIN = 13;
 
 const word CYCLE_OPERATION_MODE_COIL = 100;
 const word ACTIVATE_LEFT_SERVO_COIL = 102;
@@ -29,8 +30,11 @@ const word COLOR_SENSOR_SIGNAL_IREG = 4;
 const byte SLAVE_ID = 1;
 const long BAUD_RATE = 9600;
 const unsigned long BUTTON_DEBOUNCE_MS = 50;
-const unsigned long SERVO_PULSE_MS = 1000;
+const unsigned long LEFT_SERVO_PULSE_MS = 1000;
+const unsigned long RIGHT_SERVO_HOLD_MS = 3000;
 const unsigned long COLOR_SENSOR_STABLE_MS = 50;
+const byte RIGHT_SERVO_INITIAL_ANGLE = 15;
+const byte RIGHT_SERVO_ACTIVE_ANGLE = 165;
 // Ajuste para LOW se a saída digital do módulo LDR estiver invertida.
 const byte COLOR_SENSOR_LEFT_SIGNAL = HIGH;
 
@@ -52,13 +56,18 @@ bool wasButtonPressed(byte pin, ButtonState &button);
 bool isConveyorOn();
 bool isManualMode();
 bool isAutomaticMode();
+void configureServo();
 void cycleOperationMode();
 void updateColorSensorReading();
 bool readStableColorSensorSignal(byte &stableSignal);
 void activateServo(Destination destination);
+unsigned long getServoActiveTime(Destination destination);
+void moveRightServoToInitialPosition();
+void moveRightServoToActivePosition();
 void countServoDestination(Destination destination);
 
 ModbusSerial modbus;
+Servo rightServo;
 
 ButtonState modeButton = {HIGH, HIGH, 0};
 ButtonState manualLeftButton = {HIGH, HIGH, 0};
@@ -78,6 +87,7 @@ bool colorSensorInitialized = false;
 
 void setup() {
   configurePins();
+  configureServo();
   configureModbus();
   registerModbusPoints();
   updateOutputs();
@@ -103,7 +113,11 @@ void configurePins() {
 
   pinMode(MOTOR_LED_PIN, OUTPUT);
   pinMode(LEFT_SERVO_LED_PIN, OUTPUT);
-  pinMode(RIGHT_SERVO_LED_PIN, OUTPUT);
+}
+
+void configureServo() {
+  rightServo.attach(RIGHT_SERVO_PIN);
+  moveRightServoToInitialPosition();
 }
 
 void configureModbus() {
@@ -259,6 +273,9 @@ void activateServo(Destination destination) {
 
   activeServo = destination;
   servoActivatedAt = millis();
+  if (destination == DESTINATION_RIGHT) {
+    moveRightServoToActivePosition();
+  }
   countServoDestination(destination);
 }
 
@@ -267,19 +284,23 @@ void updateServoPulse() {
     return;
   }
 
-  if (millis() - servoActivatedAt >= SERVO_PULSE_MS) {
+  if (millis() - servoActivatedAt >= getServoActiveTime(activeServo)) {
     stopServo();
   }
 }
 
-void stopServo() { activeServo = DESTINATION_NONE; }
+void stopServo() {
+  if (activeServo == DESTINATION_RIGHT) {
+    moveRightServoToInitialPosition();
+  }
+
+  activeServo = DESTINATION_NONE;
+}
 
 void updateOutputs() {
   digitalWrite(MOTOR_LED_PIN, isConveyorOn() ? HIGH : LOW);
   digitalWrite(LEFT_SERVO_LED_PIN,
                activeServo == DESTINATION_LEFT ? HIGH : LOW);
-  digitalWrite(RIGHT_SERVO_LED_PIN,
-               activeServo == DESTINATION_RIGHT ? HIGH : LOW);
 }
 
 void publishScadaState() {
@@ -298,6 +319,19 @@ void publishScadaState() {
 void updateScadaStatus(word offset, bool value) { modbus.Ists(offset, value); }
 
 void updateScadaValue(word offset, word value) { modbus.Ireg(offset, value); }
+
+unsigned long getServoActiveTime(Destination destination) {
+  return destination == DESTINATION_RIGHT ? RIGHT_SERVO_HOLD_MS
+                                          : LEFT_SERVO_PULSE_MS;
+}
+
+void moveRightServoToInitialPosition() {
+  rightServo.write(RIGHT_SERVO_INITIAL_ANGLE);
+}
+
+void moveRightServoToActivePosition() {
+  rightServo.write(RIGHT_SERVO_ACTIVE_ANGLE);
+}
 
 void countServoDestination(Destination destination) {
   if (destination == DESTINATION_LEFT) {
