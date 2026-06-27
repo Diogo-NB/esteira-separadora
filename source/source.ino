@@ -9,9 +9,9 @@ const byte MODE_BUTTON_PIN = 2;
 const byte MANUAL_LEFT_BUTTON_PIN = 5;
 const byte MANUAL_RIGHT_BUTTON_PIN = 6;
 const byte COLOR_SENSOR_PIN = 12;
+const byte LEFT_COUNT_INPUT_PIN = 11;
+const byte RIGHT_COUNT_INPUT_PIN = 10;
 
-const byte MOTOR_LED_PIN = 9;
-const byte LEFT_SERVO_LED_PIN = 10;
 const byte RIGHT_SERVO_PIN = 13;
 
 const byte LCD_ADDRESS = 0x27;
@@ -40,6 +40,7 @@ const word COLOR_SENSOR_SIGNAL_IREG = 4;
 const byte SLAVE_ID = 1;
 const long BAUD_RATE = 9600;
 const unsigned long BUTTON_DEBOUNCE_MS = 50;
+const unsigned long COUNT_INPUT_STABLE_MS = 50;
 const unsigned long LEFT_SERVO_PULSE_MS = 1000;
 const unsigned long RIGHT_SERVO_HOLD_MS = 3000;
 const unsigned long COLOR_SENSOR_STABLE_MS = 50;
@@ -62,20 +63,28 @@ struct ButtonState {
   unsigned long lastChangeTime;
 };
 
+struct CountInputState {
+  bool lastReading;
+  bool stableState;
+  unsigned long lastChangeTime;
+};
+
 bool wasButtonPressed(byte pin, ButtonState &button);
+bool wasCountPulseReceived(byte pin, CountInputState &countInput);
 bool isConveyorOn();
 bool isManualMode();
 bool isAutomaticMode();
+void initializeCountInputs();
 void configureServo();
 void configureLcd();
 void cycleOperationMode();
+void handleCountInputs();
 void updateColorSensorReading();
 bool readStableColorSensorSignal(byte &stableSignal);
 void activateServo(Destination destination);
 unsigned long getServoActiveTime(Destination destination);
 void moveRightServoToInitialPosition();
 void moveRightServoToActivePosition();
-void countServoDestination(Destination destination);
 void updateLcdDisplay();
 
 ModbusSerial modbus;
@@ -85,6 +94,8 @@ LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 ButtonState modeButton = {HIGH, HIGH, 0};
 ButtonState manualLeftButton = {HIGH, HIGH, 0};
 ButtonState manualRightButton = {HIGH, HIGH, 0};
+CountInputState leftCountInput = {LOW, LOW, 0};
+CountInputState rightCountInput = {LOW, LOW, 0};
 
 OperationMode operationMode = MODE_OFF;
 Destination colorSensorReading = DESTINATION_NONE;
@@ -103,11 +114,11 @@ unsigned long lastLcdRefresh = 0;
 
 void setup() {
   configurePins();
+  initializeCountInputs();
   configureServo();
   configureLcd();
   configureModbus();
   registerModbusPoints();
-  updateOutputs();
   publishScadaState();
   updateLcdDisplay();
 }
@@ -119,7 +130,7 @@ void loop() {
   handleScadaCommands();
   handlePhysicalInputs();
   updateColorSensorReading();
-  updateOutputs();
+  handleCountInputs();
   publishScadaState();
   updateLcdDisplay();
 }
@@ -129,9 +140,20 @@ void configurePins() {
   pinMode(MANUAL_LEFT_BUTTON_PIN, INPUT_PULLUP);
   pinMode(MANUAL_RIGHT_BUTTON_PIN, INPUT_PULLUP);
   pinMode(COLOR_SENSOR_PIN, INPUT);
+  pinMode(LEFT_COUNT_INPUT_PIN, INPUT);
+  pinMode(RIGHT_COUNT_INPUT_PIN, INPUT);
+}
 
-  pinMode(MOTOR_LED_PIN, OUTPUT);
-  pinMode(LEFT_SERVO_LED_PIN, OUTPUT);
+void initializeCountInputs() {
+  unsigned long now = millis();
+
+  leftCountInput.lastReading = digitalRead(LEFT_COUNT_INPUT_PIN);
+  leftCountInput.stableState = leftCountInput.lastReading;
+  leftCountInput.lastChangeTime = now;
+
+  rightCountInput.lastReading = digitalRead(RIGHT_COUNT_INPUT_PIN);
+  rightCountInput.stableState = rightCountInput.lastReading;
+  rightCountInput.lastChangeTime = now;
 }
 
 void configureServo() {
@@ -220,6 +242,23 @@ bool wasButtonPressed(byte pin, ButtonState &button) {
   return button.stableState == LOW;
 }
 
+bool wasCountPulseReceived(byte pin, CountInputState &countInput) {
+  bool reading = digitalRead(pin);
+
+  if (reading != countInput.lastReading) {
+    countInput.lastChangeTime = millis();
+    countInput.lastReading = reading;
+  }
+
+  if (millis() - countInput.lastChangeTime < COUNT_INPUT_STABLE_MS ||
+      reading == countInput.stableState) {
+    return false;
+  }
+
+  countInput.stableState = reading;
+  return countInput.stableState == HIGH;
+}
+
 bool consumeScadaCommand(word coilOffset) {
   if (!modbus.Coil(coilOffset)) {
     return false;
@@ -301,7 +340,25 @@ void activateServo(Destination destination) {
   if (destination == DESTINATION_RIGHT) {
     moveRightServoToActivePosition();
   }
-  countServoDestination(destination);
+}
+
+void handleCountInputs() {
+  bool leftPulseReceived =
+      wasCountPulseReceived(LEFT_COUNT_INPUT_PIN, leftCountInput);
+  bool rightPulseReceived =
+      wasCountPulseReceived(RIGHT_COUNT_INPUT_PIN, rightCountInput);
+
+  if (!isConveyorOn()) {
+    return;
+  }
+
+  if (leftPulseReceived) {
+    leftItemCount++;
+  }
+
+  if (rightPulseReceived) {
+    rightItemCount++;
+  }
 }
 
 void updateServoPulse() {
@@ -320,12 +377,6 @@ void stopServo() {
   }
 
   activeServo = DESTINATION_NONE;
-}
-
-void updateOutputs() {
-  digitalWrite(MOTOR_LED_PIN, isConveyorOn() ? HIGH : LOW);
-  digitalWrite(LEFT_SERVO_LED_PIN,
-               activeServo == DESTINATION_LEFT ? HIGH : LOW);
 }
 
 void publishScadaState() {
@@ -475,14 +526,6 @@ void moveRightServoToInitialPosition() {
 
 void moveRightServoToActivePosition() {
   rightServo.write(RIGHT_SERVO_ACTIVE_ANGLE);
-}
-
-void countServoDestination(Destination destination) {
-  if (destination == DESTINATION_LEFT) {
-    leftItemCount++;
-  } else if (destination == DESTINATION_RIGHT) {
-    rightItemCount++;
-  }
 }
 
 bool isConveyorOn() { return operationMode != MODE_OFF; }

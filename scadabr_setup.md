@@ -22,6 +22,10 @@ Conectar cada push button entre o pino indicado e o GND. O código usa `INPUT_PU
 
 Conectar a saída digital do módulo LDR no pino `12`.
 
+Conectar as saídas digitais dos sensores de contagem nos pinos `11` e `10`.
+Essas entradas usam `INPUT`, sem pull-up interno, e esperam sinais digitais
+externos de `0 V` ou `5 V`. O nível `HIGH` representa valor `1`.
+
 Conectar o fio de sinal do servo direito no pino `13`. Alimentar o servo com
 uma fonte externa regulada de `5 V` e conectar o GND dessa fonte ao GND do
 Arduino. Não alimentar o servo pelo pino `5V` do Arduino durante os testes com
@@ -36,8 +40,8 @@ instalada na Arduino IDE.
 | 2 | alternar modo: desligada, manual, automático |
 | 5 | comando manual do servo esquerdo |
 | 6 | comando manual do servo direito |
-| 9 | LED do motor/esteira ligada |
-| 10 | LED do servo esquerdo |
+| 10 | entrada digital de contagem direita |
+| 11 | entrada digital de contagem esquerda |
 | 12 | saída digital do módulo LDR |
 | 13 | sinal do servo direito |
 | A4 | SDA do display LCD I2C |
@@ -136,7 +140,7 @@ Esses Coils são comandos momentâneos, não estados. É esperado que voltem par
 | Nome sugerido | Tipo | Offset | Função |
 |---|---|---:|---|
 | `CMD_CYCLE_OPERATION_MODE` | Coil Status | 100 | alternar modo: `OFF -> MANUAL -> AUTO -> OFF` |
-| `CMD_LEFT_SERVO` | Coil Status | 102 | acionar servo esquerdo no modo manual |
+| `CMD_LEFT_SERVO` | Coil Status | 102 | acionar pulso lógico do servo esquerdo no modo manual |
 | `CMD_RIGHT_SERVO` | Coil Status | 103 | acionar servo direito real no modo manual |
 | `CMD_RESET_COUNTERS` | Coil Status | 104 | zerar os dois contadores |
 
@@ -176,10 +180,11 @@ os mesmos valores internos publicados nos pontos acima.
 - Os comandos de servo físicos e remotos somente funcionam no modo manual.
 - No modo automático, uma mudança de lado na leitura do LDR aciona o servo correspondente.
 - O servo direito inicia próximo do ângulo mínimo, vai até aproximadamente o meio do curso quando acionado, aguarda `3 segundos` e retorna para a posição inicial.
-- O servo esquerdo continua simulado por LED no pino `10`, com pulso de `1 segundo`.
+- O servo esquerdo é representado por um pulso lógico de `1 segundo` nos estados publicados ao ScadaBR e no LCD.
 - Novos comandos de servo são ignorados enquanto um acionamento está ativo.
 - Desligar a esteira cancela imediatamente um pulso ativo.
-- Os contadores incrementam quando um acionamento válido do servo correspondente começa.
+- Os contadores incrementam uma vez por transição estável de `0` para `1` nas entradas digitais de contagem, somente com a esteira ligada.
+- O pino `11` incrementa `LEFT_ITEM_COUNT`; o pino `10` incrementa `RIGHT_ITEM_COUNT`.
 - O LCD alterna páginas com modo/estado, contadores, sensor e servos ativos.
 
 ## Validação manual
@@ -189,8 +194,11 @@ os mesmos valores internos publicados nos pontos acima.
 3. Confirmar que o LCD acende e alterna as páginas a cada `2 segundos`.
 4. Habilitar o Data Source e todos os Data Points no ScadaBR.
 5. Acionar `CMD_CYCLE_OPERATION_MODE` e confirmar a sequência `OFF`, `MANUAL`, `AUTO` em `OPERATION_MODE` e no LCD.
-6. No modo manual, testar `CMD_LEFT_SERVO` e confirmar o pulso no LED do pino `10`.
+6. No modo manual, testar `CMD_LEFT_SERVO` e confirmar `LEFT_SERVO_ACTIVE` no ScadaBR e no LCD.
 7. No modo manual, testar `CMD_RIGHT_SERVO` e confirmar que o servo no pino `13` vai para a direita, aguarda cerca de `3 segundos` e retorna.
 8. No modo automático, variar a iluminação do LDR e confirmar `COLOR_SENSOR_SIGNAL`, `COLOR_SENSOR_READING` e servo automático.
-9. Confirmar que os contadores incrementam junto com cada acionamento de servo aceito no ScadaBR e no LCD.
-10. Acionar `CMD_RESET_COUNTERS` e confirmar que ambos retornam a zero.
+9. Com a esteira em `OFF`, aplicar pulsos `0 -> 1` nos pinos `11` e `10` e confirmar que os contadores não mudam.
+10. Com a esteira em `MANUAL` ou `AUTO`, aplicar um pulso `0 -> 1` no pino `11` e confirmar que `LEFT_ITEM_COUNT` incrementa uma vez.
+11. Com a esteira em `MANUAL` ou `AUTO`, aplicar um pulso `0 -> 1` no pino `10` e confirmar que `RIGHT_ITEM_COUNT` incrementa uma vez.
+12. Manter uma entrada de contagem em `1` e confirmar que o contador não continua incrementando até o sinal voltar para `0` e subir novamente.
+13. Acionar `CMD_RESET_COUNTERS` e confirmar que ambos retornam a zero.
