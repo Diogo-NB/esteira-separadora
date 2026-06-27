@@ -27,6 +27,10 @@ uma fonte externa regulada de `5 V` e conectar o GND dessa fonte ao GND do
 Arduino. Não alimentar o servo pelo pino `5V` do Arduino durante os testes com
 carga.
 
+Conectar o display LCD 16x2 com módulo I2C aos pinos `A4` e `A5`. O código
+assume endereço I2C `0x27` e requer a biblioteca externa `LiquidCrystal_I2C`
+instalada na Arduino IDE.
+
 | Pino | Uso |
 |---:|---|
 | 2 | alternar modo: desligada, manual, automático |
@@ -36,6 +40,8 @@ carga.
 | 10 | LED do servo esquerdo |
 | 12 | saída digital do módulo LDR |
 | 13 | sinal do servo direito |
+| A4 | SDA do display LCD I2C |
+| A5 | SCL do display LCD I2C |
 
 Os pinos `0` e `1` são reservados para a comunicação Modbus pela porta `Serial`.
 
@@ -51,6 +57,25 @@ Usar a ligação abaixo para o servo direito:
 
 Se possível, colocar um capacitor entre `+5 V` e GND próximo ao servo, por
 exemplo entre `470 uF` e `1000 uF`.
+
+## Ligação do display LCD I2C 16x2
+
+Usar a ligação abaixo para o display:
+
+| Pino do módulo LCD I2C | Conectar em |
+|---|---|
+| VCC | `5 V` do Arduino |
+| GND | GND do Arduino |
+| SDA | `A4` do Arduino Uno |
+| SCL | `A5` do Arduino Uno |
+
+Antes de compilar o código na Arduino IDE, instalar a biblioteca
+`LiquidCrystal_I2C`. O endereço configurado no código é `0x27`; se o display
+não mostrar texto, verificar se o módulo usa outro endereço, como `0x3F`.
+
+O LCD mostra os mesmos estados efetivos enviados ao ScadaBR, alternando páginas
+automaticamente a cada `2 segundos`. Ele não cria novos pontos Modbus e não
+altera os offsets existentes.
 
 ## Exportar e importar configuração
 
@@ -137,6 +162,9 @@ No campo de tipo de dado do ScadaBR, usar inteiro sem sinal de 2 bytes para esse
 
 Se `CMD_CYCLE_OPERATION_MODE` voltar para `false`, isso está correto. O valor que deve mudar e permanecer é `OPERATION_MODE`: `0=OFF`, `1=MANUAL`, `2=AUTO`.
 
+O display LCD local não exige novos Data Points no ScadaBR. Ele usa diretamente
+os mesmos valores internos publicados nos pontos acima.
+
 ## Regras da simulação
 
 - A esteira inicia no modo `OFF`.
@@ -151,14 +179,17 @@ Se `CMD_CYCLE_OPERATION_MODE` voltar para `false`, isso está correto. O valor q
 - Novos comandos de servo são ignorados enquanto um acionamento está ativo.
 - Desligar a esteira cancela imediatamente um pulso ativo.
 - Os contadores incrementam quando um acionamento válido do servo correspondente começa.
+- O LCD alterna páginas com modo/estado, contadores, sensor e servos ativos.
 
 ## Validação manual
 
-1. Fazer upload pela Arduino IDE e fechar o Serial Monitor e o Serial Plotter.
-2. Habilitar o Data Source e todos os Data Points no ScadaBR.
-3. Acionar `CMD_CYCLE_OPERATION_MODE` e confirmar a sequência `OFF`, `MANUAL`, `AUTO` em `OPERATION_MODE`.
-4. No modo manual, testar `CMD_LEFT_SERVO` e confirmar o pulso no LED do pino `10`.
-5. No modo manual, testar `CMD_RIGHT_SERVO` e confirmar que o servo no pino `13` vai para a direita, aguarda cerca de `3 segundos` e retorna.
-6. No modo automático, variar a iluminação do LDR e confirmar `COLOR_SENSOR_SIGNAL`, `COLOR_SENSOR_READING` e servo automático.
-7. Confirmar que os contadores incrementam junto com cada acionamento de servo aceito.
-8. Acionar `CMD_RESET_COUNTERS` e confirmar que ambos retornam a zero.
+1. Instalar a biblioteca `LiquidCrystal_I2C` na Arduino IDE.
+2. Fazer upload pela Arduino IDE e fechar o Serial Monitor e o Serial Plotter.
+3. Confirmar que o LCD acende e alterna as páginas a cada `2 segundos`.
+4. Habilitar o Data Source e todos os Data Points no ScadaBR.
+5. Acionar `CMD_CYCLE_OPERATION_MODE` e confirmar a sequência `OFF`, `MANUAL`, `AUTO` em `OPERATION_MODE` e no LCD.
+6. No modo manual, testar `CMD_LEFT_SERVO` e confirmar o pulso no LED do pino `10`.
+7. No modo manual, testar `CMD_RIGHT_SERVO` e confirmar que o servo no pino `13` vai para a direita, aguarda cerca de `3 segundos` e retorna.
+8. No modo automático, variar a iluminação do LDR e confirmar `COLOR_SENSOR_SIGNAL`, `COLOR_SENSOR_READING` e servo automático.
+9. Confirmar que os contadores incrementam junto com cada acionamento de servo aceito no ScadaBR e no LCD.
+10. Acionar `CMD_RESET_COUNTERS` e confirmar que ambos retornam a zero.

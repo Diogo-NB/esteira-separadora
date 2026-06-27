@@ -1,6 +1,9 @@
+#include <stdio.h>
 #include <Modbus.h>
 #include <ModbusSerial.h>
 #include <Servo.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 
 const byte MODE_BUTTON_PIN = 2;
 const byte MANUAL_LEFT_BUTTON_PIN = 5;
@@ -10,6 +13,12 @@ const byte COLOR_SENSOR_PIN = 12;
 const byte MOTOR_LED_PIN = 9;
 const byte LEFT_SERVO_LED_PIN = 10;
 const byte RIGHT_SERVO_PIN = 13;
+
+const byte LCD_ADDRESS = 0x27;
+const byte LCD_COLUMNS = 16;
+const byte LCD_ROWS = 2;
+const byte LCD_PAGE_COUNT = 3;
+const unsigned long LCD_PAGE_INTERVAL_MS = 2000;
 
 const word CYCLE_OPERATION_MODE_COIL = 100;
 const word ACTIVATE_LEFT_SERVO_COIL = 102;
@@ -57,6 +66,7 @@ bool isConveyorOn();
 bool isManualMode();
 bool isAutomaticMode();
 void configureServo();
+void configureLcd();
 void cycleOperationMode();
 void updateColorSensorReading();
 bool readStableColorSensorSignal(byte &stableSignal);
@@ -65,9 +75,11 @@ unsigned long getServoActiveTime(Destination destination);
 void moveRightServoToInitialPosition();
 void moveRightServoToActivePosition();
 void countServoDestination(Destination destination);
+void updateLcdDisplay();
 
 ModbusSerial modbus;
 Servo rightServo;
+LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 
 ButtonState modeButton = {HIGH, HIGH, 0};
 ButtonState manualLeftButton = {HIGH, HIGH, 0};
@@ -84,14 +96,20 @@ byte lastColorSensorSignal = LOW;
 byte stableColorSensorSignal = LOW;
 unsigned long colorSensorLastChangeTime = 0;
 bool colorSensorInitialized = false;
+byte currentLcdPage = 0;
+unsigned long lastLcdPageChange = 0;
+char lastLcdLine1[LCD_COLUMNS + 1] = "";
+char lastLcdLine2[LCD_COLUMNS + 1] = "";
 
 void setup() {
   configurePins();
   configureServo();
+  configureLcd();
   configureModbus();
   registerModbusPoints();
   updateOutputs();
   publishScadaState();
+  updateLcdDisplay();
 }
 
 void loop() {
@@ -103,6 +121,7 @@ void loop() {
   updateColorSensorReading();
   updateOutputs();
   publishScadaState();
+  updateLcdDisplay();
 }
 
 void configurePins() {
@@ -123,6 +142,12 @@ void configureServo() {
 void configureModbus() {
   modbus.config(&Serial, BAUD_RATE, SERIAL_8N1);
   modbus.setSlaveId(SLAVE_ID);
+}
+
+void configureLcd() {
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
 }
 
 void registerModbusPoints() {
@@ -319,6 +344,138 @@ void publishScadaState() {
 void updateScadaStatus(word offset, bool value) { modbus.Ists(offset, value); }
 
 void updateScadaValue(word offset, word value) { modbus.Ireg(offset, value); }
+
+const char *getOperationModeLabel() {
+  if (operationMode == MODE_MANUAL) {
+    return "MAN";
+  }
+
+  if (operationMode == MODE_AUTO) {
+    return "AUTO";
+  }
+
+  return "OFF";
+}
+
+const char *getConveyorLabel() { return isConveyorOn() ? "ON" : "OFF"; }
+
+char getYesNoLabel(bool value) { return value ? 'S' : 'N'; }
+
+char getBitLabel(bool value) { return value ? '1' : '0'; }
+
+char getDestinationLabel(Destination destination) {
+  if (destination == DESTINATION_LEFT) {
+    return 'E';
+  }
+
+  if (destination == DESTINATION_RIGHT) {
+    return 'D';
+  }
+
+  return 'N';
+}
+
+void setLcdLine(char *line, const char *text) {
+  byte index = 0;
+
+  while (index < LCD_COLUMNS && text[index] != '\0') {
+    line[index] = text[index];
+    index++;
+  }
+
+  while (index < LCD_COLUMNS) {
+    line[index] = ' ';
+    index++;
+  }
+
+  line[LCD_COLUMNS] = '\0';
+}
+
+bool areLcdLinesEqual(const char *leftLine, const char *rightLine) {
+  for (byte index = 0; index <= LCD_COLUMNS; index++) {
+    if (leftLine[index] != rightLine[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void copyLcdLine(char *targetLine, const char *sourceLine) {
+  for (byte index = 0; index <= LCD_COLUMNS; index++) {
+    targetLine[index] = sourceLine[index];
+  }
+}
+
+void writeLcdLineIfChanged(byte row, const char *line, char *lastLine) {
+  if (areLcdLinesEqual(line, lastLine)) {
+    return;
+  }
+
+  lcd.setCursor(0, row);
+  lcd.print(line);
+  copyLcdLine(lastLine, line);
+}
+
+void buildOperationLcdPage(char *line1, char *line2) {
+  char text[LCD_COLUMNS + 1];
+
+  snprintf(text, sizeof(text), "Modo: %s", getOperationModeLabel());
+  setLcdLine(line1, text);
+
+  snprintf(text, sizeof(text), "Est:%s Aut:%c", getConveyorLabel(),
+           getYesNoLabel(isAutomaticMode()));
+  setLcdLine(line2, text);
+}
+
+void buildCountersLcdPage(char *line1, char *line2) {
+  char text[LCD_COLUMNS + 1];
+
+  snprintf(text, sizeof(text), "Esq:%05u", leftItemCount);
+  setLcdLine(line1, text);
+
+  snprintf(text, sizeof(text), "Dir:%05u", rightItemCount);
+  setLcdLine(line2, text);
+}
+
+void buildSensorLcdPage(char *line1, char *line2) {
+  char text[LCD_COLUMNS + 1];
+
+  snprintf(text, sizeof(text), "Sensor:%c Sig:%u",
+           getDestinationLabel(colorSensorReading), colorSensorDigitalValue);
+  setLcdLine(line1, text);
+
+  snprintf(text, sizeof(text), "Srv E:%c D:%c",
+           getBitLabel(activeServo == DESTINATION_LEFT),
+           getBitLabel(activeServo == DESTINATION_RIGHT));
+  setLcdLine(line2, text);
+}
+
+void buildLcdPage(char *line1, char *line2) {
+  if (currentLcdPage == 0) {
+    buildOperationLcdPage(line1, line2);
+  } else if (currentLcdPage == 1) {
+    buildCountersLcdPage(line1, line2);
+  } else {
+    buildSensorLcdPage(line1, line2);
+  }
+}
+
+void updateLcdDisplay() {
+  unsigned long now = millis();
+
+  if (now - lastLcdPageChange >= LCD_PAGE_INTERVAL_MS) {
+    currentLcdPage = (currentLcdPage + 1) % LCD_PAGE_COUNT;
+    lastLcdPageChange = now;
+  }
+
+  char line1[LCD_COLUMNS + 1];
+  char line2[LCD_COLUMNS + 1];
+
+  buildLcdPage(line1, line2);
+  writeLcdLineIfChanged(0, line1, lastLcdLine1);
+  writeLcdLineIfChanged(1, line2, lastLcdLine2);
+}
 
 unsigned long getServoActiveTime(Destination destination) {
   return destination == DESTINATION_RIGHT ? RIGHT_SERVO_HOLD_MS
