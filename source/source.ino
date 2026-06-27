@@ -14,7 +14,7 @@ const byte MOTOR_LED_PIN = 9;
 const byte LEFT_SERVO_LED_PIN = 10;
 const byte RIGHT_SERVO_PIN = 13;
 
-const byte LCD_ADDRESS = 0x3F;
+const byte LCD_ADDRESS = 0x27;
 const byte LCD_COLUMNS = 16;
 const byte LCD_ROWS = 2;
 const byte LCD_PAGE_COUNT = 3;
