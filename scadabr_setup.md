@@ -175,7 +175,7 @@ os mesmos valores internos publicados nos pontos acima.
 - Os servos somente funcionam com a esteira ligada.
 - Os comandos de servo físicos e remotos somente funcionam no modo manual.
 - No modo automático, uma mudança de lado na leitura do LDR aciona o servo correspondente.
-- O servo direito inicia próximo do ângulo mínimo, vai para próximo do ângulo máximo quando acionado, aguarda `3 segundos` e retorna para a posição inicial.
+- O servo direito inicia próximo do ângulo mínimo, vai até aproximadamente o meio do curso quando acionado, aguarda `3 segundos` e retorna para a posição inicial.
 - O servo esquerdo continua simulado por LED no pino `10`, com pulso de `1 segundo`.
 - Novos comandos de servo são ignorados enquanto um acionamento está ativo.
 - Desligar a esteira cancela imediatamente um pulso ativo.
