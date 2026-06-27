@@ -25,9 +25,9 @@ Conectar a saída digital do módulo LDR no pino `12`.
 Conectar as saídas digitais dos sensores de contagem nos pinos `11` e `10`.
 Essas entradas usam `INPUT`, sem pull-up interno, e esperam sinais digitais
 externos de `0 V` ou `5 V`. O nível `HIGH` representa valor `1`. A contagem é
-feita por interrupção na borda de subida, então os sinais devem ser limpos; se
-forem usados botões mecânicos, aplicar debounce ou condicionamento externo para
-evitar contagens duplicadas.
+feita por interrupção na borda de descida, quando o sinal sai de `1` para `0`.
+Depois de cada contagem, novas bordas na mesma entrada são ignoradas por
+`150 ms` para reduzir contagens duplicadas por oscilação do sinal.
 
 Conectar o fio de sinal do servo direito no pino `13`. Alimentar o servo com
 uma fonte externa regulada de `5 V` e conectar o GND dessa fonte ao GND do
@@ -186,7 +186,8 @@ os mesmos valores internos publicados nos pontos acima.
 - O servo esquerdo é representado por um pulso lógico de `1 segundo` nos estados publicados ao ScadaBR e no LCD.
 - Novos comandos de servo são ignorados enquanto um acionamento está ativo.
 - Desligar a esteira cancela imediatamente um pulso ativo.
-- Os contadores incrementam uma vez por borda de subida `0 -> 1` nas entradas digitais de contagem, somente com a esteira ligada.
+- Os contadores incrementam uma vez por borda de descida `1 -> 0` nas entradas digitais de contagem, somente com a esteira ligada.
+- Depois de contar uma entrada, o código ignora novas bordas dessa mesma entrada por `150 ms`.
 - O pino `11` incrementa `LEFT_ITEM_COUNT`; o pino `10` incrementa `RIGHT_ITEM_COUNT`.
 - O LCD alterna páginas com modo/estado, contadores, sensor e servos ativos.
 
@@ -200,9 +201,9 @@ os mesmos valores internos publicados nos pontos acima.
 6. No modo manual, testar `CMD_LEFT_SERVO` e confirmar `LEFT_SERVO_ACTIVE` no ScadaBR e no LCD.
 7. No modo manual, testar `CMD_RIGHT_SERVO` e confirmar que o servo no pino `13` vai para a direita, aguarda cerca de `3 segundos` e retorna.
 8. No modo automático, variar a iluminação do LDR e confirmar `COLOR_SENSOR_SIGNAL`, `COLOR_SENSOR_READING` e servo automático.
-9. Com a esteira em `OFF`, aplicar pulsos `0 -> 1` nos pinos `11` e `10` e confirmar que os contadores não mudam.
-10. Com a esteira em `MANUAL` ou `AUTO`, aplicar um pulso `0 -> 1` no pino `11` e confirmar que `LEFT_ITEM_COUNT` incrementa uma vez.
-11. Com a esteira em `MANUAL` ou `AUTO`, aplicar um pulso `0 -> 1` no pino `10` e confirmar que `RIGHT_ITEM_COUNT` incrementa uma vez.
-12. Aplicar um pulso rápido `0 -> 1 -> 0` em uma entrada de contagem e confirmar que o contador correspondente incrementa uma vez.
-13. Manter uma entrada de contagem em `1` e confirmar que o contador não continua incrementando até o sinal voltar para `0` e subir novamente.
+9. Com a esteira em `OFF`, aplicar pulsos `1 -> 0` nos pinos `11` e `10` e confirmar que os contadores não mudam.
+10. Com a esteira em `MANUAL` ou `AUTO`, aplicar um pulso `1 -> 0` no pino `11` e confirmar que `LEFT_ITEM_COUNT` incrementa uma vez.
+11. Com a esteira em `MANUAL` ou `AUTO`, aplicar um pulso `1 -> 0` no pino `10` e confirmar que `RIGHT_ITEM_COUNT` incrementa uma vez.
+12. Aplicar um pulso rápido `1 -> 0 -> 1` em uma entrada de contagem e confirmar que o contador correspondente incrementa uma vez.
+13. Repetir pulsos na mesma entrada com intervalo menor que `150 ms` e confirmar que não há nova contagem nesse intervalo.
 14. Acionar `CMD_RESET_COUNTERS` e confirmar que ambos retornam a zero.

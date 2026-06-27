@@ -43,6 +43,7 @@ const word COLOR_SENSOR_SIGNAL_IREG = 4;
 const byte SLAVE_ID = 1;
 const long BAUD_RATE = 9600;
 const unsigned long BUTTON_DEBOUNCE_MS = 50;
+const unsigned long COUNT_INPUT_LOCKOUT_MS = 150;
 const unsigned long LEFT_SERVO_PULSE_MS = 1000;
 const unsigned long RIGHT_SERVO_HOLD_MS = 3000;
 const unsigned long COLOR_SENSOR_STABLE_MS = 50;
@@ -108,6 +109,8 @@ volatile bool countInputsEnabled = false;
 volatile byte lastCountInputPortState = 0;
 volatile byte pendingLeftCountPulses = 0;
 volatile byte pendingRightCountPulses = 0;
+unsigned long lastLeftCountTime = 0;
+unsigned long lastRightCountTime = 0;
 
 void setup() {
   configurePins();
@@ -324,6 +327,7 @@ void activateServo(Destination destination) {
 void handleCountInputs() {
   byte leftPulses;
   byte rightPulses;
+  unsigned long now = millis();
 
   noInterrupts();
   leftPulses = pendingLeftCountPulses;
@@ -332,8 +336,15 @@ void handleCountInputs() {
   pendingRightCountPulses = 0;
   interrupts();
 
-  leftItemCount += leftPulses;
-  rightItemCount += rightPulses;
+  if (leftPulses > 0 && now - lastLeftCountTime >= COUNT_INPUT_LOCKOUT_MS) {
+    leftItemCount++;
+    lastLeftCountTime = now;
+  }
+
+  if (rightPulses > 0 && now - lastRightCountTime >= COUNT_INPUT_LOCKOUT_MS) {
+    rightItemCount++;
+    lastRightCountTime = now;
+  }
 }
 
 void updateServoPulse() {
@@ -512,7 +523,7 @@ bool isAutomaticMode() { return operationMode == MODE_AUTO; }
 ISR(PCINT0_vect) {
   byte currentPortState = PINB;
   byte changedBits = currentPortState ^ lastCountInputPortState;
-  byte risingBits = changedBits & currentPortState;
+  byte fallingBits = changedBits & ~currentPortState;
 
   lastCountInputPortState = currentPortState;
 
@@ -520,11 +531,11 @@ ISR(PCINT0_vect) {
     return;
   }
 
-  if ((risingBits & LEFT_COUNT_INPUT_MASK) && pendingLeftCountPulses < 255) {
+  if ((fallingBits & LEFT_COUNT_INPUT_MASK) && pendingLeftCountPulses < 255) {
     pendingLeftCountPulses++;
   }
 
-  if ((risingBits & RIGHT_COUNT_INPUT_MASK) && pendingRightCountPulses < 255) {
+  if ((fallingBits & RIGHT_COUNT_INPUT_MASK) && pendingRightCountPulses < 255) {
     pendingRightCountPulses++;
   }
 }
