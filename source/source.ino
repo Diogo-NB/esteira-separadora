@@ -18,7 +18,7 @@ const byte LCD_ADDRESS = 0x3F;
 const byte LCD_COLUMNS = 16;
 const byte LCD_ROWS = 2;
 const byte LCD_PAGE_COUNT = 3;
-const unsigned long LCD_PAGE_INTERVAL_MS = 2000;
+const unsigned long LCD_PAGE_INTERVAL_MS = 3000;
 const unsigned long LCD_REFRESH_INTERVAL_MS = 250;
 
 const word CYCLE_OPERATION_MODE_COIL = 100;
