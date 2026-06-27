@@ -45,7 +45,7 @@ const unsigned long LEFT_SERVO_PULSE_MS = 1000;
 const unsigned long RIGHT_SERVO_HOLD_MS = 3000;
 const unsigned long COLOR_SENSOR_STABLE_MS = 50;
 const byte RIGHT_SERVO_INITIAL_ANGLE = 15;
-const byte RIGHT_SERVO_ACTIVE_ANGLE = 90;
+const byte RIGHT_SERVO_ACTIVE_ANGLE = 70;
 // Ajuste para LOW se a saída digital do módulo LDR estiver invertida.
 const byte COLOR_SENSOR_LEFT_SIGNAL = HIGH;
 
