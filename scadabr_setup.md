@@ -80,10 +80,10 @@ Antes de compilar o código na Arduino IDE, instalar a biblioteca
 `LiquidCrystal_I2C`. O endereço configurado no código é `0x27`; se o display
 não mostrar texto, verificar se o módulo usa outro endereço, como `0x3F`.
 
-O LCD mostra os mesmos estados efetivos enviados ao ScadaBR, alternando páginas
+O LCD mostra estados efetivos enviados ao ScadaBR, alternando páginas
 automaticamente a cada `2 segundos`. Ele não cria novos pontos Modbus e não
-altera os offsets existentes. A página de contadores mostra os valores sem
-zeros à esquerda.
+altera os offsets existentes. A página de contador mostra apenas
+`LEFT_ITEM_COUNT`, sem zeros à esquerda, com o rótulo `contador`.
 
 ## Exportar e importar configuração
 
@@ -189,7 +189,7 @@ os mesmos valores internos publicados nos pontos acima.
 - Os contadores incrementam uma vez por borda de descida `1 -> 0` nas entradas digitais de contagem, somente com a esteira ligada.
 - Depois de contar uma entrada, o código ignora novas bordas dessa mesma entrada por `150 ms`.
 - O pino `11` incrementa `LEFT_ITEM_COUNT`; o pino `10` incrementa `RIGHT_ITEM_COUNT`.
-- O LCD alterna páginas com modo/estado, contadores, sensor e servos ativos.
+- O LCD alterna páginas com modo/estado, contador esquerdo, sensor e servos ativos.
 
 ## Validação manual
 

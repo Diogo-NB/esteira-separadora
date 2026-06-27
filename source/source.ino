@@ -447,11 +447,10 @@ void buildOperationLcdPage(char *line1, char *line2) {
 void buildCountersLcdPage(char *line1, char *line2) {
   char text[LCD_COLUMNS + 1];
 
-  snprintf(text, sizeof(text), "Esq:%u", leftItemCount);
+  snprintf(text, sizeof(text), "contador:%u", leftItemCount);
   setLcdLine(line1, text);
 
-  snprintf(text, sizeof(text), "Dir:%u", rightItemCount);
-  setLcdLine(line2, text);
+  setLcdLine(line2, "");
 }
 
 void buildSensorLcdPage(char *line1, char *line2) {
