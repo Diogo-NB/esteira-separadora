@@ -3,6 +3,7 @@
 #include <ModbusSerial.h>
 #include <Servo.h>
 #include <Wire.h>
+#include <avr/interrupt.h>
 #include <stdio.h>
 
 const byte MODE_BUTTON_PIN = 2;
@@ -11,6 +12,8 @@ const byte MANUAL_RIGHT_BUTTON_PIN = 6;
 const byte COLOR_SENSOR_PIN = 12;
 const byte LEFT_COUNT_INPUT_PIN = 11;
 const byte RIGHT_COUNT_INPUT_PIN = 10;
+const byte LEFT_COUNT_INPUT_MASK = _BV(PB3);
+const byte RIGHT_COUNT_INPUT_MASK = _BV(PB2);
 
 const byte RIGHT_SERVO_PIN = 13;
 
@@ -40,7 +43,6 @@ const word COLOR_SENSOR_SIGNAL_IREG = 4;
 const byte SLAVE_ID = 1;
 const long BAUD_RATE = 9600;
 const unsigned long BUTTON_DEBOUNCE_MS = 50;
-const unsigned long COUNT_INPUT_STABLE_MS = 50;
 const unsigned long LEFT_SERVO_PULSE_MS = 1000;
 const unsigned long RIGHT_SERVO_HOLD_MS = 3000;
 const unsigned long COLOR_SENSOR_STABLE_MS = 50;
@@ -63,18 +65,11 @@ struct ButtonState {
   unsigned long lastChangeTime;
 };
 
-struct CountInputState {
-  bool lastReading;
-  bool stableState;
-  unsigned long lastChangeTime;
-};
-
 bool wasButtonPressed(byte pin, ButtonState &button);
-bool wasCountPulseReceived(byte pin, CountInputState &countInput);
 bool isConveyorOn();
 bool isManualMode();
 bool isAutomaticMode();
-void initializeCountInputs();
+void configureCountInputInterrupts();
 void configureServo();
 void configureLcd();
 void cycleOperationMode();
@@ -94,8 +89,6 @@ LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 ButtonState modeButton = {HIGH, HIGH, 0};
 ButtonState manualLeftButton = {HIGH, HIGH, 0};
 ButtonState manualRightButton = {HIGH, HIGH, 0};
-CountInputState leftCountInput = {LOW, LOW, 0};
-CountInputState rightCountInput = {LOW, LOW, 0};
 
 OperationMode operationMode = MODE_OFF;
 Destination colorSensorReading = DESTINATION_NONE;
@@ -111,10 +104,14 @@ bool colorSensorInitialized = false;
 byte currentLcdPage = 0;
 unsigned long lastLcdPageChange = 0;
 unsigned long lastLcdRefresh = 0;
+volatile bool countInputsEnabled = false;
+volatile byte lastCountInputPortState = 0;
+volatile byte pendingLeftCountPulses = 0;
+volatile byte pendingRightCountPulses = 0;
 
 void setup() {
   configurePins();
-  initializeCountInputs();
+  configureCountInputInterrupts();
   configureServo();
   configureLcd();
   configureModbus();
@@ -144,16 +141,13 @@ void configurePins() {
   pinMode(RIGHT_COUNT_INPUT_PIN, INPUT);
 }
 
-void initializeCountInputs() {
-  unsigned long now = millis();
-
-  leftCountInput.lastReading = digitalRead(LEFT_COUNT_INPUT_PIN);
-  leftCountInput.stableState = leftCountInput.lastReading;
-  leftCountInput.lastChangeTime = now;
-
-  rightCountInput.lastReading = digitalRead(RIGHT_COUNT_INPUT_PIN);
-  rightCountInput.stableState = rightCountInput.lastReading;
-  rightCountInput.lastChangeTime = now;
+void configureCountInputInterrupts() {
+  noInterrupts();
+  lastCountInputPortState = PINB;
+  PCIFR |= _BV(PCIF0);
+  PCMSK0 |= _BV(PCINT2) | _BV(PCINT3);
+  PCICR |= _BV(PCIE0);
+  interrupts();
 }
 
 void configureServo() {
@@ -242,23 +236,6 @@ bool wasButtonPressed(byte pin, ButtonState &button) {
   return button.stableState == LOW;
 }
 
-bool wasCountPulseReceived(byte pin, CountInputState &countInput) {
-  bool reading = digitalRead(pin);
-
-  if (reading != countInput.lastReading) {
-    countInput.lastChangeTime = millis();
-    countInput.lastReading = reading;
-  }
-
-  if (millis() - countInput.lastChangeTime < COUNT_INPUT_STABLE_MS ||
-      reading == countInput.stableState) {
-    return false;
-  }
-
-  countInput.stableState = reading;
-  return countInput.stableState == HIGH;
-}
-
 bool consumeScadaCommand(word coilOffset) {
   if (!modbus.Coil(coilOffset)) {
     return false;
@@ -277,6 +254,8 @@ void cycleOperationMode() {
     operationMode = MODE_OFF;
     stopServo();
   }
+
+  countInputsEnabled = isConveyorOn();
 }
 
 void updateColorSensorReading() {
@@ -343,22 +322,18 @@ void activateServo(Destination destination) {
 }
 
 void handleCountInputs() {
-  bool leftPulseReceived =
-      wasCountPulseReceived(LEFT_COUNT_INPUT_PIN, leftCountInput);
-  bool rightPulseReceived =
-      wasCountPulseReceived(RIGHT_COUNT_INPUT_PIN, rightCountInput);
+  byte leftPulses;
+  byte rightPulses;
 
-  if (!isConveyorOn()) {
-    return;
-  }
+  noInterrupts();
+  leftPulses = pendingLeftCountPulses;
+  rightPulses = pendingRightCountPulses;
+  pendingLeftCountPulses = 0;
+  pendingRightCountPulses = 0;
+  interrupts();
 
-  if (leftPulseReceived) {
-    leftItemCount++;
-  }
-
-  if (rightPulseReceived) {
-    rightItemCount++;
-  }
+  leftItemCount += leftPulses;
+  rightItemCount += rightPulses;
 }
 
 void updateServoPulse() {
@@ -533,3 +508,23 @@ bool isConveyorOn() { return operationMode != MODE_OFF; }
 bool isManualMode() { return operationMode == MODE_MANUAL; }
 
 bool isAutomaticMode() { return operationMode == MODE_AUTO; }
+
+ISR(PCINT0_vect) {
+  byte currentPortState = PINB;
+  byte changedBits = currentPortState ^ lastCountInputPortState;
+  byte risingBits = changedBits & currentPortState;
+
+  lastCountInputPortState = currentPortState;
+
+  if (!countInputsEnabled) {
+    return;
+  }
+
+  if ((risingBits & LEFT_COUNT_INPUT_MASK) && pendingLeftCountPulses < 255) {
+    pendingLeftCountPulses++;
+  }
+
+  if ((risingBits & RIGHT_COUNT_INPUT_MASK) && pendingRightCountPulses < 255) {
+    pendingRightCountPulses++;
+  }
+}
