@@ -75,7 +75,8 @@ não mostrar texto, verificar se o módulo usa outro endereço, como `0x3F`.
 
 O LCD mostra os mesmos estados efetivos enviados ao ScadaBR, alternando páginas
 automaticamente a cada `2 segundos`. Ele não cria novos pontos Modbus e não
-altera os offsets existentes.
+altera os offsets existentes. A página de contadores mostra os valores sem
+zeros à esquerda.
 
 ## Exportar e importar configuração
 

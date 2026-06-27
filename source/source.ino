@@ -1,9 +1,9 @@
-#include <stdio.h>
+#include <LiquidCrystal_I2C.h>
 #include <Modbus.h>
 #include <ModbusSerial.h>
 #include <Servo.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <stdio.h>
 
 const byte MODE_BUTTON_PIN = 2;
 const byte MANUAL_LEFT_BUTTON_PIN = 5;
@@ -14,11 +14,12 @@ const byte MOTOR_LED_PIN = 9;
 const byte LEFT_SERVO_LED_PIN = 10;
 const byte RIGHT_SERVO_PIN = 13;
 
-const byte LCD_ADDRESS = 0x27;
+const byte LCD_ADDRESS = 0x3F;
 const byte LCD_COLUMNS = 16;
 const byte LCD_ROWS = 2;
 const byte LCD_PAGE_COUNT = 3;
 const unsigned long LCD_PAGE_INTERVAL_MS = 2000;
+const unsigned long LCD_REFRESH_INTERVAL_MS = 250;
 
 const word CYCLE_OPERATION_MODE_COIL = 100;
 const word ACTIVATE_LEFT_SERVO_COIL = 102;
@@ -98,8 +99,7 @@ unsigned long colorSensorLastChangeTime = 0;
 bool colorSensorInitialized = false;
 byte currentLcdPage = 0;
 unsigned long lastLcdPageChange = 0;
-char lastLcdLine1[LCD_COLUMNS + 1] = "";
-char lastLcdLine2[LCD_COLUMNS + 1] = "";
+unsigned long lastLcdRefresh = 0;
 
 void setup() {
   configurePins();
@@ -391,30 +391,9 @@ void setLcdLine(char *line, const char *text) {
   line[LCD_COLUMNS] = '\0';
 }
 
-bool areLcdLinesEqual(const char *leftLine, const char *rightLine) {
-  for (byte index = 0; index <= LCD_COLUMNS; index++) {
-    if (leftLine[index] != rightLine[index]) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-void copyLcdLine(char *targetLine, const char *sourceLine) {
-  for (byte index = 0; index <= LCD_COLUMNS; index++) {
-    targetLine[index] = sourceLine[index];
-  }
-}
-
-void writeLcdLineIfChanged(byte row, const char *line, char *lastLine) {
-  if (areLcdLinesEqual(line, lastLine)) {
-    return;
-  }
-
+void writeLcdLine(byte row, const char *line) {
   lcd.setCursor(0, row);
   lcd.print(line);
-  copyLcdLine(lastLine, line);
 }
 
 void buildOperationLcdPage(char *line1, char *line2) {
@@ -431,10 +410,10 @@ void buildOperationLcdPage(char *line1, char *line2) {
 void buildCountersLcdPage(char *line1, char *line2) {
   char text[LCD_COLUMNS + 1];
 
-  snprintf(text, sizeof(text), "Esq:%05u", leftItemCount);
+  snprintf(text, sizeof(text), "Esq:%u", leftItemCount);
   setLcdLine(line1, text);
 
-  snprintf(text, sizeof(text), "Dir:%05u", rightItemCount);
+  snprintf(text, sizeof(text), "Dir:%u", rightItemCount);
   setLcdLine(line2, text);
 }
 
@@ -463,18 +442,26 @@ void buildLcdPage(char *line1, char *line2) {
 
 void updateLcdDisplay() {
   unsigned long now = millis();
+  bool pageChanged = false;
 
   if (now - lastLcdPageChange >= LCD_PAGE_INTERVAL_MS) {
     currentLcdPage = (currentLcdPage + 1) % LCD_PAGE_COUNT;
     lastLcdPageChange = now;
+    pageChanged = true;
   }
+
+  if (!pageChanged && now - lastLcdRefresh < LCD_REFRESH_INTERVAL_MS) {
+    return;
+  }
+
+  lastLcdRefresh = now;
 
   char line1[LCD_COLUMNS + 1];
   char line2[LCD_COLUMNS + 1];
 
   buildLcdPage(line1, line2);
-  writeLcdLineIfChanged(0, line1, lastLcdLine1);
-  writeLcdLineIfChanged(1, line2, lastLcdLine2);
+  writeLcdLine(0, line1);
+  writeLcdLine(1, line2);
 }
 
 unsigned long getServoActiveTime(Destination destination) {
